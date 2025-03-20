@@ -1,3 +1,50 @@
+[build-system]
+requires = ["setuptools>=42", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "jwstGiantPlanets"
+version = "0.1.0"
+description = "Custom JWST data reduction and visualization pipelines for giant planets and solar system targets"
+readme = "README.md"
+authors = [
+    {name = "Oliver R. T. King", email = "ortk2@leicester.ac.uk"},
+    {name = "Leigh N. Fletcher"},
+    {name = "Jake Harkett"},
+    {name = "Michael T. Roman"},
+    {name = "Henrik Melin"}
+]
+license = "MIT"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+    "Topic :: Scientific/Engineering :: Astronomy",
+]
+requires-python = ">=3.10"
+dependencies = [
+    "astropy",
+    "matplotlib",
+    "numpy",
+    "spiceypy",
+    "scipy",
+    "tqdm",
+    "planetmapper",
+    "jwst",
+]
+
+[project.urls]
+"Homepage" = "https://github.com/JWSTGiantPlanets/pipelines"
+"Bug Tracker" = "https://github.com/JWSTGiantPlanets/pipelines/issues"
+"Documentation" = "https://github.com/JWSTGiantPlanets/pipelines"
+
+[project.scripts]
+miri-pipeline = "jwstGiantPlanets.miri_pipeline:main"
+nirspec-pipeline = "jwstGiantPlanets.nirspec_pipeline:main"
+jwst-navigate = "jwstGiantPlanets.navigate_jwst_observations:main"
+
+[tool.setuptools]
+packages = ["jwstGiantPlanets"]
+
 [tool.black]
 skip-string-normalization = true
 exclude = ""
