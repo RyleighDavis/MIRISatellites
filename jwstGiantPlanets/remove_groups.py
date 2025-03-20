@@ -5,7 +5,7 @@ import os
 import numpy as np
 from astropy.io import fits
 
-import tools
+from . import tools
 
 
 def remove_groups_from_file(path: str, groups_to_use: list[int] | None = None) -> None:
