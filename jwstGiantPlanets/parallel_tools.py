@@ -8,7 +8,7 @@ from typing import Any, Callable, TypeVar
 
 import tqdm
 
-from tools import log
+from .tools import log
 
 T = TypeVar('T')
 
