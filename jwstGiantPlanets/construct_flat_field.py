@@ -9,8 +9,8 @@ import numpy as np
 import tqdm
 from astropy.io import fits
 
-import flat_field
-import tools
+from . import flat_field
+from . import tools
 
 VARIABLE_HEADER_KEYS = (
     'DATE',

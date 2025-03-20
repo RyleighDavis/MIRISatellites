@@ -209,8 +209,8 @@ import tqdm
 from astropy.io import fits
 from jwst.assign_wcs.util import NoDataOnDetectorError
 
-import flat_field
-from pipeline import BoolOrBoth, Pipeline, Step, get_pipeline_argument_parser
+from . import flat_field
+from .pipeline import BoolOrBoth, Pipeline, Step, get_pipeline_argument_parser
 
 # Pipeline constants for NIRSpec
 STEPS: tuple[Step, ...] = (

@@ -11,7 +11,7 @@ import numpy as np
 from astropy.io import fits
 from scipy.ndimage import maximum_filter
 
-import tools
+from . import tools
 
 EXPAND_WINDOW_SPECTRAL = 2
 EXPAND_WINDOW_SPATIAL = 0

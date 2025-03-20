@@ -5,7 +5,7 @@ import os
 import numpy as np
 from astropy.io import fits
 
-import tools
+from . import tools
 
 
 def subtract_background(

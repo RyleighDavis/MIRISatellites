@@ -5,8 +5,8 @@ import scipy.interpolate
 import tqdm
 from astropy.io import fits
 
-import save_spx
-import tools
+from . import save_spx
+from . import tools
 
 DATA_KEYS = ['SCI', 'ERR']
 

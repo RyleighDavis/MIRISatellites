@@ -4,8 +4,8 @@ import numpy as np
 import tqdm
 from astropy.io import fits
 
-import image_filters
-import tools
+from . import image_filters
+from . import tools
 
 
 def despike_cube(

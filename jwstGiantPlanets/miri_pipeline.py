@@ -221,12 +221,12 @@ from astropy.io import fits
 from jwst.residual_fringe import ResidualFringeStep
 from jwst.spectral_leak import SpectralLeakStep
 
-import argparse_utils
-import flat_field
-import psf_correction
-from defringe_1d import defringe_file
-from parallel_tools import runmany
-from pipeline import BoolOrBoth, Pipeline, RootPath, Step, get_pipeline_argument_parser
+from . import argparse_utils
+from . import flat_field
+from . import psf_correction
+from .defringe_1d import defringe_file
+from .parallel_tools import runmany
+from .pipeline import BoolOrBoth, Pipeline, RootPath, Step, get_pipeline_argument_parser
 
 # Pipeline constants for MIRI
 STEPS: tuple[Step, ...] = (

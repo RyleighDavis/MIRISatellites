@@ -19,7 +19,7 @@ import tqdm
 from astropy.io import fits
 from jwst.residual_fringe.utils import fit_residual_fringes_1d
 
-import tools
+from . import tools
 
 
 def defringe_multiple(

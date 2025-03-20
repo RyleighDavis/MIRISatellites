@@ -44,8 +44,8 @@ import tqdm
 from astropy.io import fits
 from matplotlib.cm import ScalarMappable
 
-import tools
-import zonal_average
+from . import tools
+from . import zonal_average
 
 PLANETMAPPER_KW = {}
 if sys.platform == 'linux' and 'PLANETMAPPER_KERNEL_PATH' not in os.environ:

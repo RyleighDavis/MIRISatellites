@@ -5,7 +5,7 @@ __version__ = '1.0.0'
 import numpy as np
 from astropy.io import fits
 
-import tools
+from . import tools
 
 GENERATION_HEADER_PREFIX = 'FLAT GENERATION'
 
