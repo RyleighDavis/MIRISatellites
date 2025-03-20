@@ -54,7 +54,7 @@ import spiceypy as spice
 import tqdm
 from astropy.io import fits
 
-import jwst_navigator
+from . import jwst_navigator
 
 KERNEL_DIR = os.environ.get('PLANETMAPPER_KERNEL_PATH', '~/spice_kernels')
 if sys.platform == 'linux' and 'PLANETMAPPER_KERNEL_PATH' not in os.environ:

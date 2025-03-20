@@ -16,7 +16,7 @@ import astropy.units as u
 import numpy as np
 from astropy.io import fits
 
-import function_cache
+from . import function_cache
 
 P = ParamSpec('P')
 T = TypeVar('T')

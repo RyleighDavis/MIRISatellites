@@ -37,15 +37,15 @@ from jwst.associations.asn_from_list import asn_from_list
 from jwst.associations.lib.rules_level3_base import DMS_Level3_Base
 from jwst.pipeline import Detector1Pipeline, Spec2Pipeline, Spec3Pipeline
 
-import argparse_utils
-import desaturate_data
-import despike_data
-import jwst_summary_animation
-import jwst_summary_plots
-import navigate_jwst_observations
-import remove_groups
-from parallel_tools import runmany
-from tools import check_path, merge_nested_dicts
+from . import argparse_utils
+from . import desaturate_data
+from . import despike_data
+from . import jwst_summary_animation
+from . import jwst_summary_plots
+from . import navigate_jwst_observations
+from . import remove_groups
+from .parallel_tools import runmany
+from .tools import check_path, merge_nested_dicts
 
 Step: TypeAlias = Literal[
     'remove_groups',
