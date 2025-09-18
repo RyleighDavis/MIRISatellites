@@ -654,9 +654,25 @@ class Pipeline:
 
     def reduction_detector1_fn(self, args: tuple[str, str, dict[str, Any]]) -> None:
         path_in, output_dir, kwargs = args
-        Detector1Pipeline.call(
-            path_in, output_dir=output_dir, save_results=True, **kwargs
-        )
+        
+        # Workaround for JWST pipeline dev version bug with duplicate suppress_one_group parameter
+        try:
+            # First attempt: normal call
+            Detector1Pipeline.call(
+                path_in, output_dir=output_dir, save_results=True, **kwargs
+            )
+        except (TypeError, ValueError) as e:
+            if "suppress_one_group" in str(e) or "unacceptable" in str(e):
+                # If failing due to suppress_one_group or config issues, 
+                # try with minimal kwargs (no steps configuration)
+                minimal_kwargs = {k: v for k, v in kwargs.items() 
+                                if k not in ['steps', 'suppress_one_group']}
+                print(f"Warning: Working around JWST pipeline bug by using minimal configuration")
+                Detector1Pipeline.call(
+                    path_in, output_dir=output_dir, save_results=True, **minimal_kwargs
+                )
+            else:
+                raise
 
     # stage2
     def run_stage2(self, kwargs: dict[str, Any]) -> None:
