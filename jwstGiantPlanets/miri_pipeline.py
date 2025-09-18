@@ -171,10 +171,11 @@ STEP_DESCRIPTIONS = """
 - `stage2`: Run the standard JWST reduction pipeline stage 2 (including optional background subtraction).
 - `defringe`: Run the JWST reduction pipeline 2D residual fringe step (note `defringe_1d` is generally preferred) [optional].
 - `stage3`: Run the standard JWST reduction pipeline stage 3 (including automatically running the spectral leak step on x1d spectra, if present).
-- `defringe_1d`: Apply the JWST reduction pipeline 1D residual fringe step to each spectrum in the s3d data cubes [optional].
+- `defringe_1d`: Apply the JWST reduction pipeline 1D residual fringe step to each spectrum in the s3d data cubes (skipped if desaturation enabled) [optional].
 - `navigate`: Navigate reduced files.
 - `psf`: Correct PSF effects using a forward model convolved with telescope's PSF [optional].
 - `desaturate`: Desaturate data using cubes with fewer groups [optional].
+- `defringe_1d_desaturated`: Apply the JWST reduction pipeline 1D residual fringe step to desaturated files only [optional].
 - `flat`: Correct flat effects using synthetic flat field cubes.
 - `despike`: Clean cubes by removing extreme outlier pixels.
 - `plot`: Generate quick look summary plots of data.
@@ -239,6 +240,7 @@ STEPS: tuple[Step, ...] = (
     'navigate',
     'psf',
     'desaturate',
+    'defringe_1d_desaturated',
     'flat',
     'despike',
     'plot',
@@ -317,6 +319,7 @@ def run_pipeline(
     defringe: BoolOrBoth = False,
     correct_psf: BoolOrBoth = False,
     defringe_1d: BoolOrBoth = 'both',
+    defringe_1d_desaturated: BoolOrBoth = False,
     flat_data_path: str = DEFAULT_FLAT_DATA_PATH,
 ) -> None:
     """
@@ -460,6 +463,7 @@ def run_pipeline(
         flat_data_path=flat_data_path,
         defringe=defringe,
         defringe_1d=defringe_1d,
+        defringe_1d_desaturated=defringe_1d_desaturated,
         correct_psf=correct_psf,
     )
     pipeline.run(
@@ -476,6 +480,7 @@ class MiriPipeline(Pipeline):
         flat_data_path: str,
         defringe: BoolOrBoth = False,
         defringe_1d: BoolOrBoth = False,
+        defringe_1d_desaturated: BoolOrBoth = False,
         correct_psf: BoolOrBoth = 'both',
         **kwargs: Any,
     ) -> None:
@@ -483,6 +488,7 @@ class MiriPipeline(Pipeline):
         self.flat_data_path = self.standardise_path(flat_data_path)
         self.defringe = defringe
         self.defringe_1d = defringe_1d
+        self.defringe_1d_desaturated = defringe_1d_desaturated
         self.correct_psf = correct_psf
 
     @staticmethod
@@ -525,6 +531,8 @@ class MiriPipeline(Pipeline):
             skip_steps.add('defringe')
         if not self.correct_psf:
             skip_steps.add('psf')
+        if not self.desaturate or not self.defringe_1d_desaturated:
+            skip_steps.add('defringe_1d_desaturated')
         return skip_steps
 
     @property
@@ -532,7 +540,7 @@ class MiriPipeline(Pipeline):
         variants = super().data_variants_individual
         if self.defringe:
             variants.add('fringe')
-        if self.defringe_1d:
+        if self.defringe_1d or self.defringe_1d_desaturated:
             variants.add('fringe1d')
         if self.correct_psf:
             variants.add('psf')
@@ -543,7 +551,7 @@ class MiriPipeline(Pipeline):
         variants_required = super().data_variants_individual_required
         if self.defringe is True:
             variants_required.add('fringe')
-        if self.defringe_1d is True:
+        if self.defringe_1d is True or self.defringe_1d_desaturated is True:
             variants_required.add('fringe1d')
         if self.correct_psf is True:
             variants_required.add('psf')
@@ -612,6 +620,17 @@ class MiriPipeline(Pipeline):
 
     # defringe_1d
     def run_defringe_1d(self, kwargs: dict[str, Any]) -> None:
+        # Skip defringe_1d on individual group files if desaturation is enabled
+        # It will be run later on the desaturated files
+        if self.desaturate:
+            self.log('Skipping defringe_1d on individual group files (will run after desaturation)', time=False)
+            return
+        
+        # Run defringe_1d on individual group files if desaturation is not enabled
+        self._run_defringe_1d_on_groups(kwargs)
+
+    def _run_defringe_1d_on_groups(self, kwargs: dict[str, Any]) -> None:
+        """Run defringe_1d on individual group files (original implementation)"""
         dir_in, dir_out = self.step_directories['defringe_1d']
         input_variant_combinations = {
             v - {'psf', 'fringe1d'}
@@ -660,6 +679,62 @@ class MiriPipeline(Pipeline):
                 self.defringe_1d_fn,
                 args_list,
                 desc='defringe_1d',
+                **self.parallel_kwargs,
+            )
+
+    def run_defringe_1d_desaturated(self, kwargs: dict[str, Any]) -> None:
+        """Run defringe_1d only on desaturated files"""
+        if not self.desaturate or not self.defringe_1d_desaturated:
+            # Skip if desaturation is not enabled or defringe_1d_desaturated is disabled
+            return
+            
+        dir_in = 'stage3_desaturated' 
+        input_variant_combinations = {
+            v - {'psf', 'fringe1d'}
+            for v in self.data_variant_combinations
+            if 'fringe1d' in v
+        }
+        
+        paths_list: list[tuple[str, str]] = []
+        for input_variant in input_variant_combinations:
+            output_variant = input_variant | {'fringe1d'}
+            paths_in = self.get_paths(
+                self.root_path,
+                dir_in,
+                '*',
+                '*_s3d.fits',
+                filter_variants=True,
+                variant_combinations={input_variant},
+            )
+            for p_in in paths_in:
+                # We need to add the fringe1d variant to the path
+                dirname_in = pathlib.Path(p_in).parts[-2]
+                dirname_without_variant = dirname_in.split('_')[0]
+                dirname_variants = frozenset(dirname_in.split('_')[1:])
+                dirname_out = (
+                    dirname_without_variant + '_' + '_'.join(sorted(output_variant))
+                )
+                if dirname_variants != input_variant:
+                    raise ValueError(
+                        f'Error when checking variant path for {p_in}'
+                        f'(expected variant {input_variant!r}, got {dirname_variants!r})'
+                    )
+
+                p_out = self.replace_path_part(p_in, -2, dirname_out, old=dirname_in)
+                if p_out == p_in:
+                    raise ValueError(
+                        f'Error when checking output path for {p_in}'
+                        '(input and output paths are the same)'
+                    )
+
+                paths_list.append((p_in, p_out))
+        
+        if paths_list:
+            args_list = [(p_in, p_out, kwargs) for p_in, p_out in paths_list]
+            runmany(
+                self.defringe_1d_fn,
+                args_list,
+                desc='defringe_1d_desaturated',
                 **self.parallel_kwargs,
             )
 
