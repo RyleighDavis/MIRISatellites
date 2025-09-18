@@ -320,6 +320,7 @@ def run_pipeline(
     correct_psf: BoolOrBoth = False,
     defringe_1d: BoolOrBoth = 'both',
     defringe_1d_desaturated: BoolOrBoth = False,
+    skip_existing: bool = False,
     flat_data_path: str = DEFAULT_FLAT_DATA_PATH,
 ) -> None:
     """
@@ -443,6 +444,8 @@ def run_pipeline(
             defringing enabled. 1D defringed data will be saved in separate directories
             (e.g. `root_path/stage3/d1_fringe1d`), so both sets of data will be
             available for further analysis.
+        skip_existing: If True, skip processing files where the output already exists.
+            This allows the pipeline to resume from where it left off if interrupted.
         flat_data_path: Optionally specify custom path to the flat field data. This path
             should contain `{channel}`, `{band}` and `{fringe}` placeholders, which will
             be replaced by appropriate values for each channel, band and defringe
@@ -464,6 +467,7 @@ def run_pipeline(
         defringe=defringe,
         defringe_1d=defringe_1d,
         defringe_1d_desaturated=defringe_1d_desaturated,
+        skip_existing=skip_existing,
         correct_psf=correct_psf,
     )
     pipeline.run(
@@ -481,6 +485,7 @@ class MiriPipeline(Pipeline):
         defringe: BoolOrBoth = False,
         defringe_1d: BoolOrBoth = False,
         defringe_1d_desaturated: BoolOrBoth = False,
+        skip_existing: bool = False,
         correct_psf: BoolOrBoth = 'both',
         **kwargs: Any,
     ) -> None:
@@ -489,6 +494,7 @@ class MiriPipeline(Pipeline):
         self.defringe = defringe
         self.defringe_1d = defringe_1d
         self.defringe_1d_desaturated = defringe_1d_desaturated
+        self.skip_existing = skip_existing
         self.correct_psf = correct_psf
 
     @staticmethod
@@ -562,7 +568,33 @@ class MiriPipeline(Pipeline):
         self.log(f'2D defringe: {self.defringe!r}', time=False)
         self.log(f'1D defringe: {self.defringe_1d!r}', time=False)
         self.log(f'Correct PSF: {self.correct_psf!r}', time=False)
+        self.log(f'Skip existing: {self.skip_existing!r}', time=False)
         self.log(f'Flat data path: {self.flat_data_path!r}', time=False)
+
+    def filter_existing_files(self, args_list: list[tuple[str, str, dict[str, Any]]]) -> list[tuple[str, str, dict[str, Any]]]:
+        """
+        Filter out files where the output already exists if skip_existing is enabled.
+        
+        Args:
+            args_list: List of (input_path, output_path, kwargs) tuples
+            
+        Returns:
+            Filtered list with existing outputs removed if skip_existing is True
+        """
+        if not self.skip_existing:
+            return args_list
+            
+        filtered_list = []
+        for input_path, output_path, kwargs in args_list:
+            if os.path.exists(output_path):
+                self.log(f'Output already exists, skipping: {output_path}', time=False)
+            else:
+                filtered_list.append((input_path, output_path, kwargs))
+        
+        if len(filtered_list) != len(args_list):
+            self.log(f'Skipped {len(args_list) - len(filtered_list)} existing files, processing {len(filtered_list)} files', time=False)
+            
+        return filtered_list
 
     # Step overrides
     def reduction_detector1_fn(self, args: tuple[str, str, dict[str, Any]]) -> None:
@@ -586,13 +618,26 @@ class MiriPipeline(Pipeline):
             paths_in = self.get_paths(root_path, dir_in, '*cal.fits')
             if 'bg' in self.data_variants_individual:
                 paths_in += self.get_paths(root_path, dir_in, 'bg', '*cal.fits')
-            args_list = [(p, os.path.dirname(p), kwargs) for p in paths_in]
-            runmany(
-                self.defringe_fn,
-                args_list,
-                desc='defringe',
-                **self.reduction_parallel_kwargs,
-            )
+            
+            # Create args_list with output paths for defringe
+            args_list = []
+            for p in paths_in:
+                output_path = p.replace('_cal.fits', '_residual_fringe.fits')
+                args_list.append((p, output_path, kwargs))
+            
+            # Filter existing files if skip_existing is enabled
+            args_list = self.filter_existing_files(args_list)
+            
+            # Convert back to the format expected by defringe_fn
+            args_list = [(p_in, os.path.dirname(p_out), kw) for p_in, p_out, kw in args_list]
+            
+            if args_list:
+                runmany(
+                    self.defringe_fn,
+                    args_list,
+                    desc='defringe',
+                    **self.reduction_parallel_kwargs,
+                )
 
     def defringe_fn(self, args: tuple[str, str, dict[str, Any]]) -> None:
         path_in, output_dir, kwargs = args
@@ -674,13 +719,18 @@ class MiriPipeline(Pipeline):
                         )
 
                     paths_list.append((p_in, p_out))
+            
+            # Apply filtering for existing files
             args_list = [(p_in, p_out, kwargs) for p_in, p_out in paths_list]
-            runmany(
-                self.defringe_1d_fn,
-                args_list,
-                desc='defringe_1d',
-                **self.parallel_kwargs,
-            )
+            args_list = self.filter_existing_files(args_list)
+            
+            if args_list:
+                runmany(
+                    self.defringe_1d_fn,
+                    args_list,
+                    desc='defringe_1d',
+                    **self.parallel_kwargs,
+                )
 
     def run_defringe_1d_desaturated(self, kwargs: dict[str, Any]) -> None:
         """Run defringe_1d only on desaturated files"""
@@ -730,13 +780,17 @@ class MiriPipeline(Pipeline):
                 paths_list.append((p_in, p_out))
         
         if paths_list:
+            # Apply filtering for existing files
             args_list = [(p_in, p_out, kwargs) for p_in, p_out in paths_list]
-            runmany(
-                self.defringe_1d_fn,
-                args_list,
-                desc='defringe_1d_desaturated',
-                **self.parallel_kwargs,
-            )
+            args_list = self.filter_existing_files(args_list)
+            
+            if args_list:
+                runmany(
+                    self.defringe_1d_fn,
+                    args_list,
+                    desc='defringe_1d_desaturated',
+                    **self.parallel_kwargs,
+                )
 
     def defringe_1d_fn(self, args: tuple[str, str, dict[str, Any]]) -> None:
         p_in, p_out, kwargs = args
@@ -862,13 +916,18 @@ class MiriPipeline(Pipeline):
                         )
 
                     paths_list.append((p_in, p_out))
+            
+            # Apply filtering for existing files
             args_list = [(p_in, p_out, kwargs) for p_in, p_out in paths_list]
-            runmany(
-                self.psf_fn,
-                args_list,
-                desc='psf',
-                **self.parallel_kwargs,
-            )
+            args_list = self.filter_existing_files(args_list)
+            
+            if args_list:
+                runmany(
+                    self.psf_fn,
+                    args_list,
+                    desc='psf',
+                    **self.parallel_kwargs,
+                )
 
     def psf_fn(self, args: tuple[str, str, dict[str, Any]]) -> None:
         p_in, p_out, kwargs = args
@@ -889,9 +948,18 @@ class MiriPipeline(Pipeline):
         paths_in = self.get_paths(
             self.root_path, dir_in, 'd*', '*_nav.fits', filter_variants=True
         )
-        self.log(f'Processing {len(paths_in)} files...', time=False)
-        for p_in in tqdm.tqdm(paths_in, desc='flat'):
+        
+        # Create args_list with output paths for filtering
+        args_list = []
+        for p_in in paths_in:
             p_out = self.replace_path_part(p_in, -3, dir_out, old=dir_in)
+            args_list.append((p_in, p_out, kwargs))
+        
+        # Filter existing files if skip_existing is enabled
+        args_list = self.filter_existing_files(args_list)
+        
+        self.log(f'Processing {len(args_list)} files...', time=False)
+        for p_in, p_out, kwargs in tqdm.tqdm(args_list, desc='flat'):
             with fits.open(p_in) as hdul:
                 hdr = hdul['PRIMARY'].header  #  type: ignore
             p_flat = self.flat_data_path.format(
@@ -900,6 +968,27 @@ class MiriPipeline(Pipeline):
                 fringe='_fringe' if hdr['S_RESFRI'] == 'COMPLETE' else '',
             )
             flat_field.apply_flat(p_in, p_out, p_flat, **kwargs)
+
+    # despike  
+    def run_despike(self, kwargs: dict[str, Any]) -> None:
+        if self.parallel_kwargs.get('parallel_frac', False):
+            # don't want progress bars to be printed when running in parallel
+            kwargs.setdefault('progress_bar', False)
+
+        dir_in, dir_out = self.step_directories['despike']
+        paths_in = self.get_paths(
+            self.root_path, dir_in, '*', '*_nav.fits', filter_variants=True
+        )
+        paths_out = [
+            self.replace_path_part(p, -3, dir_out, old=dir_in) for p in paths_in
+        ]
+        args_list = [(p_in, p_out, kwargs) for p_in, p_out in zip(paths_in, paths_out)]
+        
+        # Filter existing files if skip_existing is enabled
+        args_list = self.filter_existing_files(args_list)
+        
+        if args_list:
+            runmany(self.despike_fn, args_list, desc='despike', **self.parallel_kwargs)
 
     # plot
     def get_plot_filename_prefix(self, path: str) -> str:
