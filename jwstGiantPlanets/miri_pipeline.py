@@ -322,6 +322,9 @@ def run_pipeline(
     defringe_1d_desaturated: BoolOrBoth = False,
     skip_existing: bool = False,
     flat_data_path: str = DEFAULT_FLAT_DATA_PATH,
+    desaturation_source_type: str = 'extended',
+    desaturation_optimize: bool = True,
+    desaturation_margin: int = 2,
 ) -> None:
     """
     Run the full MIRI IFU reduction pipeline, including the standard reduction from
@@ -450,6 +453,15 @@ def run_pipeline(
             should contain `{channel}`, `{band}` and `{fringe}` placeholders, which will
             be replaced by appropriate values for each channel, band and defringe
             setting.
+        desaturation_source_type: Source type for desaturation optimization. 'extended' 
+            (default) processes from saturation end to all groups. 'point' processes
+            only a few groups around saturation end for compact sources.
+        desaturation_optimize: If True (default), optimize group processing for 
+            desaturation by skipping early saturated groups. Set to False to process
+            all groups as before.
+        desaturation_margin: Number of groups before saturation end to start processing
+            (default: 2). Larger values process more groups for safety, smaller values
+            are more aggressive in optimization.
     """
     pipeline = MiriPipeline(
         root_path,
@@ -469,6 +481,9 @@ def run_pipeline(
         defringe_1d_desaturated=defringe_1d_desaturated,
         skip_existing=skip_existing,
         correct_psf=correct_psf,
+        desaturation_source_type=desaturation_source_type,
+        desaturation_optimize=desaturation_optimize,
+        desaturation_margin=desaturation_margin,
     )
     pipeline.run(
         skip_steps=skip_steps,

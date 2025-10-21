@@ -164,6 +164,9 @@ class Pipeline:
         step_kwargs: dict[Step, dict[str, Any]] | None | str = None,
         parallel_kwargs: dict[str, Any] | None = None,
         reduction_parallel_kwargs: dict[str, Any] | None = None,
+        desaturation_source_type: str = 'extended',
+        desaturation_optimize: bool = True,
+        desaturation_margin: int = 2,
     ):
         # Process CLI arguements
         if isinstance(groups_to_use, str):
@@ -190,6 +193,9 @@ class Pipeline:
         self.background_subtract = background_subtract
         self.background_path = self.standardise_path(background_path)
         self.basic_navigation = basic_navigation
+        self.desaturation_source_type = desaturation_source_type
+        self.desaturation_optimize = desaturation_optimize
+        self.desaturation_margin = desaturation_margin
 
         if cube_build_weighting is not None:
             self.step_kwargs = merge_nested_dicts(
@@ -627,7 +633,13 @@ class Pipeline:
         paths_in = self.get_paths(self.root_path, dir_in, '*_uncal.fits')
         self.log(f'Processing {len(paths_in)} files...', time=False)
         for p in tqdm.tqdm(paths_in, desc='remove_groups'):
-            remove_groups.remove_groups_from_file(p, self.groups_to_use)
+            remove_groups.remove_groups_from_file(
+                p, 
+                self.groups_to_use, 
+                optimize_for_desaturation=self.desaturation_optimize, 
+                saturation_margin=self.desaturation_margin,
+                source_type=self.desaturation_source_type
+            )
 
     # stage1
     def run_stage1(self, kwargs: dict[str, Any]) -> None:
